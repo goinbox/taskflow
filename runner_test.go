@@ -7,6 +7,12 @@ import (
 	"github.com/goinbox/golog"
 )
 
+func TestTaskGraph(t *testing.T) {
+	graph := NewRunner(nil).TaskGraph(new(demoTask))
+
+	t.Log(graph)
+}
+
 func runTaskUseP(in *demoTaskIn) *demoTaskOut {
 	w, _ := golog.NewFileWriter("/dev/stdout", 0)
 	logger := golog.NewSimpleLogger(w, golog.NewSimpleFormater())
@@ -44,10 +50,4 @@ func TestRunTaskUseP3(t *testing.T) {
 	})
 
 	t.Log("out", out)
-}
-
-func TestTaskGraph(t *testing.T) {
-	graph := NewRunner(nil).TaskGraph(new(demoTask))
-
-	t.Log(graph)
 }
