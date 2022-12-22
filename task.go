@@ -13,7 +13,7 @@ const (
 	StepCodeJump2 = "JUMP2"
 	StepCodeJump3 = "JUMP3"
 
-	logFieldKeyStepKey = "stepKey"
+	LogFieldKeyStepKey = "StepKey"
 )
 
 type StepFunc func() (string, error)

@@ -40,7 +40,7 @@ func (r *Runner) RunTask(task Task, in, out interface{}) error {
 	nextStepConfig, ok := stepConfigMap[nextStepKey]
 	if !ok {
 		r.logger.Error("firstStep not exists", &golog.Field{
-			Key:   logFieldKeyStepKey,
+			Key:   LogFieldKeyStepKey,
 			Value: nextStepKey,
 		})
 		return nil
@@ -77,7 +77,7 @@ func (r *Runner) initTask(task Task, in, out interface{}) (err error) {
 func (r *Runner) runStep(stepKey string, config *StepConfig) (nextStepKey string) {
 	stepFunc := config.StepFunc
 	logger := r.logger.With(&golog.Field{
-		Key:   logFieldKeyStepKey,
+		Key:   LogFieldKeyStepKey,
 		Value: stepKey,
 	})
 
