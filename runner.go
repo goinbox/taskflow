@@ -174,7 +174,7 @@ func (r *Runner) TaskGraph(task Task, codes ...string) string {
 		}
 	}
 
-	result := "```mermaid\ngraph TD\n"
+	result := "```mermaid\nflowchart TD\n"
 	for curStep, config := range task.StepConfigMap() {
 		for code, nextStep := range config.RouteMap {
 			if filterCode {
@@ -185,7 +185,7 @@ func (r *Runner) TaskGraph(task Task, codes ...string) string {
 			if nextStep == "" {
 				nextStep = "finish"
 			}
-			result += fmt.Sprintf("%s --> |%s|%s\n", curStep, code, nextStep)
+			result += fmt.Sprintf("%s --%s--> %s\n", curStep, code, nextStep)
 		}
 	}
 
