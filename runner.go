@@ -1,19 +1,42 @@
 package taskflow
 
 import (
+	"encoding/json"
 	"fmt"
 	"time"
 
 	"github.com/goinbox/golog"
 )
 
+type GraphConfig struct {
+	FinishStepKey string
+
+	StartStyleColor   string
+	FinishStyleColor  string
+	RunStepStyleColor string
+}
+
+type RunStep struct {
+	StepKey  string
+	StepCode string
+}
+
 type Runner struct {
-	logger golog.Logger
+	GraphConfig *GraphConfig
+
+	logger   golog.Logger
+	runSteps []*RunStep
 }
 
 func NewRunner(logger golog.Logger) *Runner {
 	r := &Runner{
 		logger: logger,
+		GraphConfig: &GraphConfig{
+			FinishStepKey:     "finish",
+			StartStyleColor:   "#b57edc",
+			FinishStyleColor:  "#74c365",
+			RunStepStyleColor: "#ff9966",
+		},
 	}
 
 	return r
@@ -23,6 +46,12 @@ func (r *Runner) RunTask(task Task, in, out interface{}) error {
 	r.logger.Notice("start runTask")
 	defer func() {
 		r.logger.Notice("end runTask")
+
+		content, _ := json.Marshal(r.runSteps)
+		r.logger.Info("task run steps", &golog.Field{
+			Key:   "RunSteps",
+			Value: string(content),
+		})
 	}()
 
 	err := r.initTask(task, in, out)
@@ -94,6 +123,10 @@ func (r *Runner) runStep(stepKey string, config *StepConfig) (nextStepKey string
 			}
 		}
 	}
+	r.runSteps = append(r.runSteps, &RunStep{
+		StepKey:  stepKey,
+		StepCode: code,
+	})
 
 	if code == StepCodeFailure {
 		if config.StepFailedFunc != nil {
@@ -164,33 +197,86 @@ func (r *Runner) retryStep(logger golog.Logger, config *StepConfig, stepFunc Ste
 	return code, err
 }
 
-func (r *Runner) TaskGraph(task Task, codes ...string) string {
+type graphRowFunc func(curStep, code, nextStep string) string
+
+func (r *Runner) graphContent(task Task, showCodes []string, grf graphRowFunc) string {
+	var graph string
+
 	filterCode := false
-	codeMap := make(map[string]bool)
-	if len(codes) > 0 {
+	showCodeMap := make(map[string]bool)
+	if len(showCodes) > 0 {
 		filterCode = true
-		for _, code := range codes {
-			codeMap[code] = true
+		for _, code := range showCodes {
+			showCodeMap[code] = true
 		}
 	}
-
-	result := "```mermaid\nflowchart TD\n"
 	for curStep, config := range task.StepConfigMap() {
 		for code, nextStep := range config.RouteMap {
 			if filterCode {
-				if _, ok := codeMap[code]; !ok {
+				if _, ok := showCodeMap[code]; !ok {
 					continue
 				}
 			}
 			if nextStep == "" {
-				nextStep = "finish"
+				nextStep = r.GraphConfig.FinishStepKey
 			}
-			result += fmt.Sprintf("%s --%s--> %s\n", curStep, code, nextStep)
+			graph += grf(curStep, code, nextStep)
 		}
 	}
 
-	result += fmt.Sprintf("style %s fill:#f9f\n", "finish")
-	result += "```"
+	return graph
+}
 
-	return result
+func (r *Runner) drawGraph(content, style string) string {
+	style += fmt.Sprintf("style %s fill:%s\n", r.GraphConfig.FinishStepKey, r.GraphConfig.FinishStyleColor)
+
+	graph := "```mermaid\nflowchart TD\n"
+	graph += content + style
+	graph += "```"
+
+	return graph
+}
+
+func (r *Runner) TaskGraph(task Task, showCodes ...string) string {
+	var style string
+	style += fmt.Sprintf("style %s fill:%s\n", task.FirstStepKey(), r.GraphConfig.StartStyleColor)
+
+	grf := func(curStep, code, nextStep string) string {
+		return fmt.Sprintf("%s --%s--> %s\n", curStep, code, nextStep)
+	}
+
+	return r.drawGraph(r.graphContent(task, showCodes, grf), style)
+}
+
+func (r *Runner) TaskRunSteps() []*RunStep {
+	return r.runSteps
+}
+
+func (r *Runner) TaskGraphRunSteps(task Task, runSteps []*RunStep, showCodes ...string) string {
+	runStepMap := make(map[string]bool)
+	var style string
+	for _, runStep := range runSteps {
+		runStepMap[runStep.StepKey+runStep.StepCode] = true
+		style += fmt.Sprintf("style %s fill:%s\n", runStep.StepKey, r.GraphConfig.RunStepStyleColor)
+	}
+
+	grf := func(curStep, code, nextStep string) string {
+		_, ok := runStepMap[curStep+code]
+		if ok {
+			return fmt.Sprintf("%s ==%s==> %s\n", curStep, code, nextStep)
+		}
+		return fmt.Sprintf("%s -.%s.-> %s\n", curStep, code, nextStep)
+	}
+
+	return r.drawGraph(r.graphContent(task, showCodes, grf), style)
+}
+
+func (r *Runner) TaskGraphRunStepsFromJson(task Task, runStepsJson []byte, showCodes ...string) (string, error) {
+	var runSteps []*RunStep
+	err := json.Unmarshal(runStepsJson, &runSteps)
+	if err != nil {
+		return "", fmt.Errorf("json.Unmarshal error: %w", err)
+	}
+
+	return r.TaskGraphRunSteps(task, runSteps, showCodes...), nil
 }
