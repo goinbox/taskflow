@@ -47,10 +47,9 @@ func (r *Runner) RunTask(task Task, in, out interface{}) error {
 	defer func() {
 		r.logger.Notice("end runTask")
 
-		content, _ := json.Marshal(r.runSteps)
 		r.logger.Info("task run steps", &golog.Field{
 			Key:   "RunSteps",
-			Value: string(content),
+			Value: r.runSteps,
 		})
 	}()
 
