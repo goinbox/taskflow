@@ -3,6 +3,7 @@ package taskflow
 import (
 	"encoding/json"
 	"fmt"
+	"runtime/debug"
 	"time"
 
 	"github.com/goinbox/golog"
@@ -95,7 +96,7 @@ func (r *Runner) RunTask(task Task, in, out interface{}) error {
 func (r *Runner) initTask(task Task, in, out interface{}) (err error) {
 	defer func() {
 		if e := recover(); e != nil {
-			err = fmt.Errorf("recover from %s", fmt.Sprint(e))
+			err = fmt.Errorf("recover from %v, stack: %s", e, string(debug.Stack()))
 		}
 	}()
 
@@ -154,7 +155,7 @@ func (r *Runner) runStepFunc(f StepFunc) (code string, err error) {
 	defer func() {
 		if e := recover(); e != nil {
 			code = StepCodeFailure
-			err = fmt.Errorf("recover from %s", fmt.Sprint(e))
+			err = fmt.Errorf("recover from %v, stack: %s", e, string(debug.Stack()))
 		}
 	}()
 
