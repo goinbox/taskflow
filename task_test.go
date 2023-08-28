@@ -3,6 +3,8 @@ package taskflow
 import (
 	"fmt"
 	"time"
+
+	"github.com/goinbox/pcontext"
 )
 
 type demoTaskIn struct {
@@ -34,8 +36,8 @@ func (t *demoTask) Init(in, out interface{}) error {
 	return nil
 }
 
-func (t *demoTask) StepConfigMap() map[string]*StepConfig {
-	return map[string]*StepConfig{
+func (t *demoTask) StepConfigMap() map[string]*StepConfig[pcontext.Context] {
+	return map[string]*StepConfig[pcontext.Context]{
 		"first": {
 			RetryCnt:       1,
 			RetryDelay:     time.Second * 1,
@@ -95,7 +97,7 @@ func (t *demoTask) Error() error {
 	return nil
 }
 
-func (t *demoTask) firstStep() (string, error) {
+func (t *demoTask) firstStep(ctx pcontext.Context) (string, error) {
 	fmt.Println("in firstStep")
 
 	if t.data.cnt == 0 {
@@ -114,7 +116,7 @@ func (t *demoTask) firstStep() (string, error) {
 	return StepCodeSuccess, nil
 }
 
-func (t *demoTask) secondStep() (string, error) {
+func (t *demoTask) secondStep(ctx pcontext.Context) (string, error) {
 	fmt.Println("in secondStep")
 
 	defer func() {
@@ -136,7 +138,7 @@ func (t *demoTask) secondStep() (string, error) {
 	return StepCodeSuccess, nil
 }
 
-func (t *demoTask) failureStep() (string, error) {
+func (t *demoTask) failureStep(ctx pcontext.Context) (string, error) {
 	fmt.Println("in failureStep")
 
 	if t.in.failureStep == "jump" {
@@ -146,7 +148,7 @@ func (t *demoTask) failureStep() (string, error) {
 	return StepCodeSuccess, nil
 }
 
-func (t *demoTask) jumpStep() (string, error) {
+func (t *demoTask) jumpStep(ctx pcontext.Context) (string, error) {
 	fmt.Println("in jumpStep")
 
 	fmt.Println("final cnt", t.data.cnt)

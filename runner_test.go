@@ -6,21 +6,23 @@ import (
 	"testing"
 
 	"github.com/goinbox/golog"
+	"github.com/goinbox/pcontext"
 )
 
 func TestTaskGraph(t *testing.T) {
-	graph := NewRunner(nil).TaskGraph(new(demoTask))
+	graph := NewRunner[pcontext.Context]().TaskGraph(new(demoTask))
 
 	t.Log(graph)
 }
 
-func runTaskUseP(in *demoTaskIn) (*demoTaskOut, *Runner) {
+func runTaskUseP(in *demoTaskIn) (*demoTaskOut, *Runner[pcontext.Context]) {
 	w, _ := golog.NewFileWriter("/dev/stdout", 0)
 	logger := golog.NewSimpleLogger(w, golog.NewSimpleFormater())
+	ctx := pcontext.NewSimpleContext("test-trace-id", logger)
 
 	out := new(demoTaskOut)
-	runner := NewRunner(logger)
-	err := runner.RunTask(new(demoTask), in, out)
+	runner := NewRunner[pcontext.Context]()
+	err := runner.RunTask(ctx, new(demoTask), in, out)
 
 	fmt.Println("error", err)
 
@@ -91,7 +93,7 @@ func TestTaskGraphRunSteps(t *testing.T) {
 		},
 	}
 
-	t.Log(NewRunner(nil).TaskGraphRunSteps(new(demoTask), runSteps))
+	t.Log(NewRunner[pcontext.Context]().TaskGraphRunSteps(new(demoTask), runSteps))
 }
 
 func TestTaskGraphRunStepsFromJson(t *testing.T) {
@@ -107,6 +109,6 @@ func TestTaskGraphRunStepsFromJson(t *testing.T) {
     }
 ]
 `
-	graph, err := NewRunner(nil).TaskGraphRunStepsFromJson(new(demoTask), []byte(s))
+	graph, err := NewRunner[pcontext.Context]().TaskGraphRunStepsFromJson(new(demoTask), []byte(s))
 	t.Log(graph, err)
 }

@@ -7,6 +7,10 @@ import (
 	"time"
 
 	"github.com/goinbox/golog"
+	"github.com/goinbox/pcontext"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type GraphConfig struct {
@@ -22,16 +26,18 @@ type RunStep struct {
 	StepCode string
 }
 
-type Runner struct {
+type StartTraceFunc[T pcontext.Context] func(ctx T, spanName string, opts ...trace.SpanStartOption) (T, trace.Span)
+
+type Runner[T pcontext.Context] struct {
 	GraphConfig *GraphConfig
 
-	logger   golog.Logger
 	runSteps []*RunStep
+
+	stf StartTraceFunc[T]
 }
 
-func NewRunner(logger golog.Logger) *Runner {
-	r := &Runner{
-		logger: logger,
+func NewRunner[T pcontext.Context]() *Runner[T] {
+	r := &Runner[T]{
 		GraphConfig: &GraphConfig{
 			FinishStepKey:     "finish",
 			StartStyleColor:   "#b57edc",
@@ -43,12 +49,19 @@ func NewRunner(logger golog.Logger) *Runner {
 	return r
 }
 
-func (r *Runner) RunTask(task Task, in, out interface{}) error {
-	r.logger.Notice("start runTask")
-	defer func() {
-		r.logger.Notice("end runTask")
+func (r *Runner[T]) SetStartTraceFunc(f StartTraceFunc[T]) *Runner[T] {
+	r.stf = f
 
-		r.logger.Info("task run steps", &golog.Field{
+	return r
+}
+
+func (r *Runner[T]) RunTask(ctx T, task Task[T], in, out interface{}) error {
+	logger := ctx.Logger()
+	logger.Notice("start runTask")
+	defer func() {
+		logger.Notice("end runTask")
+
+		logger.Info("task run steps", &golog.Field{
 			Key:   "RunSteps",
 			Value: r.runSteps,
 		})
@@ -61,15 +74,15 @@ func (r *Runner) RunTask(task Task, in, out interface{}) error {
 
 	stepConfigMap := task.StepConfigMap()
 	if len(stepConfigMap) == 0 {
-		r.logger.Warning("stepConfigMap's len is 0")
+		logger.Warning("stepConfigMap's len is 0")
 		return nil
 	}
 
 	nextStepKey := task.FirstStepKey()
 	nextStepConfig, ok := stepConfigMap[nextStepKey]
 	if !ok {
-		r.logger.Error("firstStep not exists", &golog.Field{
-			Key:   LogFieldKeyStepKey,
+		logger.Error("firstStep not exists", &golog.Field{
+			Key:   "StepKey",
 			Value: nextStepKey,
 		})
 		return nil
@@ -78,7 +91,7 @@ func (r *Runner) RunTask(task Task, in, out interface{}) error {
 	for {
 		task.BeforeStep(nextStepKey)
 		curStepKey := nextStepKey
-		nextStepKey = r.runStep(nextStepKey, nextStepConfig)
+		nextStepKey = r.runStep(ctx, nextStepKey, nextStepConfig)
 		task.AfterStep(curStepKey)
 
 		if nextStepKey == "" {
@@ -93,7 +106,7 @@ func (r *Runner) RunTask(task Task, in, out interface{}) error {
 	return nil
 }
 
-func (r *Runner) initTask(task Task, in, out interface{}) (err error) {
+func (r *Runner[T]) initTask(task Task[T], in, out interface{}) (err error) {
 	defer func() {
 		if e := recover(); e != nil {
 			err = fmt.Errorf("recover from %v, stack: %s", e, string(debug.Stack()))
@@ -103,21 +116,18 @@ func (r *Runner) initTask(task Task, in, out interface{}) (err error) {
 	return task.Init(in, out)
 }
 
-func (r *Runner) runStep(stepKey string, config *StepConfig) (nextStepKey string) {
+func (r *Runner[T]) runStep(ctx T, stepKey string, config *StepConfig[T]) (nextStepKey string) {
 	stepFunc := config.StepFunc
-	logger := r.logger.With(&golog.Field{
-		Key:   LogFieldKeyStepKey,
-		Value: stepKey,
-	})
+	logger := ctx.Logger()
 
 	logger.Notice("start runStep")
 
-	code, err := r.runStepFunc(stepFunc)
+	code, err := r.runStepFunc(ctx, stepKey, stepFunc)
 	if err != nil {
 		logger.Error("runStep error", golog.ErrorField(err))
 		if code == "" {
 			if config.RetryCnt > 0 {
-				code, err = r.retryStep(logger, config, stepFunc)
+				code, err = r.retryStep(ctx, stepKey, config, stepFunc)
 			} else {
 				code = StepCodeFailure
 			}
@@ -151,7 +161,7 @@ func (r *Runner) runStep(stepKey string, config *StepConfig) (nextStepKey string
 	return nextStepKey
 }
 
-func (r *Runner) runStepFunc(f StepFunc) (code string, err error) {
+func (r *Runner[T]) runStepFunc(ctx T, stepKey string, f StepFunc[T]) (code string, err error) {
 	defer func() {
 		if e := recover(); e != nil {
 			code = StepCodeFailure
@@ -159,10 +169,22 @@ func (r *Runner) runStepFunc(f StepFunc) (code string, err error) {
 		}
 	}()
 
-	return f()
+	if r.stf != nil {
+		var span trace.Span
+		ctx, span = r.stf(ctx, fmt.Sprintf("RunStep %s", stepKey))
+		defer func() {
+			span.AddEvent("StepCode", trace.WithAttributes(attribute.String("code", code)))
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+		}()
+	}
+
+	return f(ctx)
 }
 
-func (r *Runner) retryStep(logger golog.Logger, config *StepConfig, stepFunc StepFunc) (code string, err error) {
+func (r *Runner[T]) retryStep(ctx T,
+	stepKey string, config *StepConfig[T], stepFunc StepFunc[T]) (code string, err error) {
+	logger := ctx.Logger()
 	for i := 0; i < config.RetryCnt; i++ {
 		logger.Notice("wait retry runStep")
 
@@ -179,7 +201,7 @@ func (r *Runner) retryStep(logger golog.Logger, config *StepConfig, stepFunc Ste
 			},
 		}...)
 
-		code, err = r.runStepFunc(stepFunc)
+		code, err = r.runStepFunc(ctx, stepKey, stepFunc)
 		if err == nil {
 			return code, nil
 		}
@@ -199,7 +221,7 @@ func (r *Runner) retryStep(logger golog.Logger, config *StepConfig, stepFunc Ste
 
 type graphRowFunc func(curStep, code, nextStep string) string
 
-func (r *Runner) graphContent(task Task, showCodes []string, grf graphRowFunc) string {
+func (r *Runner[T]) graphContent(task Task[T], showCodes []string, grf graphRowFunc) string {
 	var graph string
 
 	filterCode := false
@@ -227,7 +249,7 @@ func (r *Runner) graphContent(task Task, showCodes []string, grf graphRowFunc) s
 	return graph
 }
 
-func (r *Runner) drawGraph(content, style string) string {
+func (r *Runner[T]) drawGraph(content, style string) string {
 	style += fmt.Sprintf("style %s fill:%s\n", r.GraphConfig.FinishStepKey, r.GraphConfig.FinishStyleColor)
 
 	graph := "```mermaid\nflowchart TD\n"
@@ -237,7 +259,7 @@ func (r *Runner) drawGraph(content, style string) string {
 	return graph
 }
 
-func (r *Runner) TaskGraph(task Task, showCodes ...string) string {
+func (r *Runner[T]) TaskGraph(task Task[T], showCodes ...string) string {
 	var style string
 	style += fmt.Sprintf("style %s fill:%s\n", task.FirstStepKey(), r.GraphConfig.StartStyleColor)
 
@@ -248,11 +270,11 @@ func (r *Runner) TaskGraph(task Task, showCodes ...string) string {
 	return r.drawGraph(r.graphContent(task, showCodes, grf), style)
 }
 
-func (r *Runner) TaskRunSteps() []*RunStep {
+func (r *Runner[T]) TaskRunSteps() []*RunStep {
 	return r.runSteps
 }
 
-func (r *Runner) TaskGraphRunSteps(task Task, runSteps []*RunStep, showCodes ...string) string {
+func (r *Runner[T]) TaskGraphRunSteps(task Task[T], runSteps []*RunStep, showCodes ...string) string {
 	runStepMap := make(map[string]bool)
 	var style string
 	for _, runStep := range runSteps {
@@ -271,7 +293,7 @@ func (r *Runner) TaskGraphRunSteps(task Task, runSteps []*RunStep, showCodes ...
 	return r.drawGraph(r.graphContent(task, showCodes, grf), style)
 }
 
-func (r *Runner) TaskGraphRunStepsFromJson(task Task, runStepsJson []byte, showCodes ...string) (string, error) {
+func (r *Runner[T]) TaskGraphRunStepsFromJson(task Task[T], runStepsJson []byte, showCodes ...string) (string, error) {
 	var runSteps []*RunStep
 	err := json.Unmarshal(runStepsJson, &runSteps)
 	if err != nil {

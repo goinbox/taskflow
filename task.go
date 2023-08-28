@@ -2,6 +2,8 @@ package taskflow
 
 import (
 	"time"
+
+	"github.com/goinbox/pcontext"
 )
 
 const (
@@ -12,29 +14,27 @@ const (
 	StepCodeJump1 = "JUMP1"
 	StepCodeJump2 = "JUMP2"
 	StepCodeJump3 = "JUMP3"
-
-	LogFieldKeyStepKey = "StepKey"
 )
 
-type StepFunc func() (string, error)
+type StepFunc[T pcontext.Context] func(ctx T) (code string, err error)
 
 type StepFailedFunc func(stepKey string, err error)
 
-type StepConfig struct {
+type StepConfig[T pcontext.Context] struct {
 	RetryCnt   int
 	RetryDelay time.Duration
 
-	StepFunc       StepFunc
+	StepFunc       StepFunc[T]
 	StepFailedFunc StepFailedFunc
 	RouteMap       map[string]string
 }
 
-type Task interface {
+type Task[T pcontext.Context] interface {
 	Name() string
 
 	Init(in, out interface{}) error
 
-	StepConfigMap() map[string]*StepConfig
+	StepConfigMap() map[string]*StepConfig[T]
 	FirstStepKey() string
 
 	BeforeStep(stepKey string)
