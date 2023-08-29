@@ -12,7 +12,7 @@ import (
 )
 
 func startTrace(ctx pcontext.Context, spanName string, opts ...trace.SpanStartOption) (pcontext.Context, trace.Span) {
-	fmt.Println("---------- start trace", ctx.TraceID())
+	fmt.Println("---------- start trace", spanName)
 	_, span := trace.NewNoopTracerProvider().Tracer("").Start(ctx, spanName, opts...)
 	return ctx, span
 }
@@ -26,7 +26,7 @@ func TestTaskGraph(t *testing.T) {
 func runTaskUseP(in *demoTaskIn) (*demoTaskOut, *Runner[pcontext.Context]) {
 	w, _ := golog.NewFileWriter("/dev/stdout", 0)
 	logger := golog.NewSimpleLogger(w, golog.NewSimpleFormater())
-	ctx := pcontext.NewSimpleContext("test-trace-id", logger)
+	ctx := pcontext.NewSimpleContext(logger)
 
 	out := new(demoTaskOut)
 	runner := NewRunner[pcontext.Context]().SetStartTraceFunc(startTrace)
