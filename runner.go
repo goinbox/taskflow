@@ -178,6 +178,7 @@ func (r *Runner[T]) runStepFunc(ctx T, stepKey string, f StepFunc[T]) (code stri
 				span.RecordError(err)
 				span.SetStatus(codes.Error, err.Error())
 			}
+			span.End()
 		}()
 	}
 
