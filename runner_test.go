@@ -7,7 +7,15 @@ import (
 
 	"github.com/goinbox/golog"
 	"github.com/goinbox/pcontext"
+
+	"go.opentelemetry.io/otel/trace"
 )
+
+func startTrace(ctx pcontext.Context, spanName string, opts ...trace.SpanStartOption) (pcontext.Context, trace.Span) {
+	fmt.Println("---------- start trace", ctx.TraceID())
+	_, span := trace.NewNoopTracerProvider().Tracer("").Start(ctx, spanName, opts...)
+	return ctx, span
+}
 
 func TestTaskGraph(t *testing.T) {
 	graph := NewRunner[pcontext.Context]().TaskGraph(new(demoTask))
@@ -21,7 +29,7 @@ func runTaskUseP(in *demoTaskIn) (*demoTaskOut, *Runner[pcontext.Context]) {
 	ctx := pcontext.NewSimpleContext("test-trace-id", logger)
 
 	out := new(demoTaskOut)
-	runner := NewRunner[pcontext.Context]()
+	runner := NewRunner[pcontext.Context]().SetStartTraceFunc(startTrace)
 	err := runner.RunTask(ctx, new(demoTask), in, out)
 
 	fmt.Println("error", err)

@@ -174,8 +174,10 @@ func (r *Runner[T]) runStepFunc(ctx T, stepKey string, f StepFunc[T]) (code stri
 		ctx, span = r.stf(ctx, fmt.Sprintf("RunStep %s", stepKey))
 		defer func() {
 			span.AddEvent("StepCode", trace.WithAttributes(attribute.String("code", code)))
-			span.RecordError(err)
-			span.SetStatus(codes.Error, err.Error())
+			if err != nil {
+				span.RecordError(err)
+				span.SetStatus(codes.Error, err.Error())
+			}
 		}()
 	}
 
