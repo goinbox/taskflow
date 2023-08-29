@@ -120,7 +120,7 @@ func (r *Runner[T]) runStep(ctx T, stepKey string, config *StepConfig[T]) (nextS
 	stepFunc := config.StepFunc
 	logger := ctx.Logger()
 
-	logger.Notice("start runStep")
+	logger.Notice("start runStep " + stepKey)
 
 	code, err := r.runStepFunc(ctx, stepKey, stepFunc)
 	if err != nil {
@@ -147,7 +147,7 @@ func (r *Runner[T]) runStep(ctx T, stepKey string, config *StepConfig[T]) (nextS
 
 	nextStepKey = config.RouteMap[code]
 
-	logger.Notice("end runStep", []*golog.Field{
+	logger.Notice("end runStep "+stepKey, []*golog.Field{
 		{
 			Key:   "code",
 			Value: code,
@@ -189,11 +189,11 @@ func (r *Runner[T]) retryStep(ctx T,
 	stepKey string, config *StepConfig[T], stepFunc StepFunc[T]) (code string, err error) {
 	logger := ctx.Logger()
 	for i := 0; i < config.RetryCnt; i++ {
-		logger.Notice("wait retry runStep")
+		logger.Notice("wait retry runStep " + stepKey)
 
 		time.Sleep(config.RetryDelay)
 
-		logger.Notice("retry runStep", []*golog.Field{
+		logger.Notice("retry runStep "+stepKey, []*golog.Field{
 			{
 				Key:   "RetryNo",
 				Value: i + 1,
@@ -209,7 +209,7 @@ func (r *Runner[T]) retryStep(ctx T,
 			return code, nil
 		}
 
-		logger.Error("runStep error", golog.ErrorField(err))
+		logger.Error("runStep error "+stepKey, golog.ErrorField(err))
 		if code != "" {
 			return code, err
 		}
