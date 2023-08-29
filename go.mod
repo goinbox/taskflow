@@ -1,4 +1,4 @@
-module github.com/goinbox/taskflow
+module github.com/goinbox/taskflow/v2
 
 go 1.20
 
