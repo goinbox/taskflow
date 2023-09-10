@@ -26,14 +26,12 @@ type RunStep struct {
 	StepCode string
 }
 
-type StartTraceFunc[T pcontext.Context] func(ctx T, spanName string, opts ...trace.SpanStartOption) (T, trace.Span)
-
 type Runner[T pcontext.Context] struct {
 	GraphConfig *GraphConfig
 
 	runSteps []*RunStep
 
-	stf StartTraceFunc[T]
+	stf pcontext.StartTraceFunc[T]
 }
 
 func NewRunner[T pcontext.Context]() *Runner[T] {
@@ -49,7 +47,7 @@ func NewRunner[T pcontext.Context]() *Runner[T] {
 	return r
 }
 
-func (r *Runner[T]) SetStartTraceFunc(f StartTraceFunc[T]) *Runner[T] {
+func (r *Runner[T]) SetStartTraceFunc(f pcontext.StartTraceFunc[T]) *Runner[T] {
 	r.stf = f
 
 	return r
