@@ -8,6 +8,7 @@ import (
 
 	"github.com/goinbox/golog"
 	"github.com/goinbox/pcontext"
+	"github.com/goinbox/ptrace"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
@@ -31,7 +32,7 @@ type Runner[T pcontext.Context] struct {
 
 	runSteps []*RunStep
 
-	stf pcontext.StartTraceFunc[T]
+	stf ptrace.StartTraceFunc[T]
 }
 
 func NewRunner[T pcontext.Context]() *Runner[T] {
@@ -47,7 +48,7 @@ func NewRunner[T pcontext.Context]() *Runner[T] {
 	return r
 }
 
-func (r *Runner[T]) SetStartTraceFunc(f pcontext.StartTraceFunc[T]) *Runner[T] {
+func (r *Runner[T]) SetStartTraceFunc(f ptrace.StartTraceFunc[T]) *Runner[T] {
 	r.stf = f
 
 	return r
